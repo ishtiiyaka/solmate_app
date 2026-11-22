@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="SolMate">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+  <title>SolMate</title>
+</head>
+<body>
+  <header class="top">
+    <h1>SolMate</h1>
+    <span id="badge" class="badge hidden">SIMULATED DATA</span>
+    <span id="route" class="chip offline">No link</span>
+    <button id="lockBtn" class="lockbtn hidden" type="button">Lock</button>
+    <button id="estop" class="estop" type="button">E-STOP</button>
+  </header>
+
+  <div id="banner" class="banner hidden" role="alert"></div>
+
+  <main>
+    <!-- ================= LIVE ================= -->
+    <section id="tab-dash" class="tab active">
+      <div class="status">
+        <div><span class="label">Cloud</span> <span id="broker">Connecting...</span></div>
+        <div><span class="label">Local</span> <span id="localst">Off</span></div>
+        <div><span class="label">Device</span> <span id="device">Unknown</span></div>
+        <div><span class="label">Last seen</span> <span id="last">--</span></div>
+      </div>
+      <div class="grid">
+        <div class="card"><h2>Power</h2><p><span id="power">--</span> W</p></div>
+        <div class="card"><h2>Voltage</h2><p><span id="voltage">--</span> V</p></div>
+        <div class="card"><h2>Current</h2><p><span id="current">--</span> A</p></div>
+        <div class="card"><h2>Azimuth</h2><p><span id="az">--</span>&deg;</p></div>
+        <div class="card"><h2>Elevation</h2><p><span id="el">--</span>&deg;</p></div>
+        <div class="card"><h2>IMU tilt</h2><p><span id="imu">--</span>&deg;</p></div>
+        <div class="card"><h2>Mode</h2><p><span id="mode">--</span></p></div>
+        <div class="card"><h2>Temp</h2><p><span id="temp">--</span> &deg;C</p></div>
+        <div class="card"><h2>Fixed panel</h2><p><span id="fixedw">--</span> W</p></div>
+        <div class="card"><h2>Irradiance</h2><p><span id="irr">--</span> <small>W/m&sup2;</small></p></div>
+        <div class="card"><h2>Wind</h2><p><span id="wind">--</span> <small>m/s</small></p></div>
+        <div class="card"><h2>Water</h2><p><span id="water">--</span> %</p></div>
+      </div>
+      <p id="stale" class="note hidden">Showing last known values. The device is not sending data.</p>
+
+      <div class="panel">
+        <h3>Location</h3>
+        <div id="mapBox" class="map"></div>
+        <p id="mapInfo" class="note"></p>
+        <div class="btns"><button type="button" id="mapOut">Zoom out</button><button type="button" id="mapIn">Zoom in</button><button type="button" id="mapSet">Use device GPS as installed position</button></div>
+      </div>
+    </section>
+
+    <!-- ================= CONTROL ================= -->
+    <section id="tab-ctrl" class="tab">
+      <div class="panel">
+        <h3>Mode</h3>
+        <div class="seg" id="modeSeg">
+          <button type="button" data-mode="manual">Manual</button>
+          <button type="button" data-mode="auto">Auto</button>
+        </div>
+        <div class="btns"><button type="button" id="ctlStow">Stow (safe position)</button><button type="button" id="ctlResume">Resume tracking</button></div>
+        <p class="note" id="modeNote"></p>
+      </div>
+
+      <div class="panel" id="manualPanel">
+        <h3>Jog (hold to move)</h3>
+        <div class="jog">
+          <button type="button" class="jogbtn" data-axis="el" data-dir="1">El &uarr;</button>
+          <button type="button" class="jogbtn" data-axis="az" data-dir="-1">&larr; Az</button>
+          <button type="button" id="stopBtn" class="stop">STOP</button>
+          <button type="button" class="jogbtn" data-axis="az" data-dir="1">Az &rarr;</button>
+          <button type="button" class="jogbtn" data-axis="el" data-dir="-1">El &darr;</button>
+        </div>
+        <p class="note">Movement stops as soon as you let go. If the connection drops, the device stops by itself.</p>
+
+        <h3>Go to angle</h3>
+        <label class="row">Azimuth <b><span id="azTgtTxt">--</span>&deg;</b>
+          <input id="azSlider" type="range" min="90" max="270" step="1"></label>
+        <label class="row">Elevation <b><span id="elTgtTxt">--</span>&deg;</b>
+          <input id="elSlider" type="range" min="5" max="85" step="1"></label>
+        <div class="btns">
+          <button type="button" id="goBtn" class="primary">Go to position</button>
+          <button type="button" id="curBtn">Use current</button>
+        </div>
+      </div>
+
+      <div class="panel" id="presetPanel">
+        <h3>Saved positions</h3>
+        <ul id="presetList" class="presets"></ul>
+        <div class="btns">
+          <input id="presetName" type="text" maxlength="20" placeholder="Name for current slider position">
+          <button type="button" id="presetSave">Save</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CHARTS ================= -->
+    <section id="tab-hist" class="tab">
+      <div class="panel">
+        <h3>History</h3>
+        <p><b id="hCount">0</b> samples &middot; from <span id="hFrom">--</span> to <span id="hTo">--</span></p>
+        <div class="two">
+          <label>Show <select id="hMetric"><option value="power">Power (tracker vs fixed)</option><option value="voltage">Voltage</option><option value="current">Current</option><option value="temp">Temperature</option><option value="irr">Irradiance</option><option value="angles">Angles</option></select></label>
+          <label>Range <select id="hRange"><option value="1">1 hour</option><option value="6">6 hours</option><option value="24" selected>24 hours</option><option value="168">7 days</option><option value="720">30 days</option><option value="all">All</option></select></label>
+        </div>
+        <canvas id="cMain" width="640" height="230"></canvas>
+        <pre id="cTip" class="tip"></pre>
+      </div>
+
+      <div class="panel">
+        <h3>Daily energy and tracking gain</h3>
+        <canvas id="cDaily" width="640" height="200"></canvas>
+        <p id="gainText" class="note"></p>
+        <div class="scroll"><table class="marks"><thead><tr><td>Day</td><td>Tracker Wh</td><td>Fixed Wh</td><td>Gain</td></tr></thead><tbody id="dailyList"></tbody></table></div>
+      </div>
+
+      <div class="panel">
+        <h3>Sun path</h3>
+        <label>Day <select id="sunDay"><option value="today">Today</option><option value="spring">Spring equinox (Mar 20)</option><option value="summer">Summer solstice (Jun 21)</option><option value="winter">Winter solstice (Dec 21)</option></select></label>
+        <canvas id="cSun" width="640" height="240"></canvas>
+        <pre id="sunTip" class="tip"></pre>
+        <p id="sunInfo" class="note"></p>
+      </div>
+
+      <div class="panel">
+        <h3>Data tools</h3>
+        <div class="two">
+          <label>Save a sample every <select id="hEvery"><option value="10">10 s</option><option value="30" selected>30 s</option><option value="60">60 s</option><option value="300">5 min</option></select></label>
+          <label>Keep samples for <select id="hKeep"><option value="7">7 days</option><option value="14">14 days</option><option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option></select></label>
+        </div>
+        <div class="btns">
+          <button type="button" id="hCsv">Export CSV (range)</button>
+          <button type="button" id="hDaily">Export daily summary</button>
+          <label class="btn">Import CSV<input type="file" id="hFile" accept=".csv,text/csv" hidden></label>
+        </div>
+        <div class="btns">
+          <button type="button" id="hDemo" class="primary">Load 7 days of demo data</button>
+          <button type="button" id="hDemoDel">Delete demo data</button>
+          <button type="button" id="hClear">Delete all history</button>
+        </div>
+        <p class="note">Imported and demo samples are kept until you delete them. Live samples older than the keep time are deleted automatically. A CSV needs a time column (time_iso or ts_ms) and power_w; fixed_power_w and irradiance_wm2 are optional.</p>
+      </div>
+    </section>
+
+    <!-- ================= EVENTS ================= -->
+    <section id="tab-events" class="tab">
+      <div class="panel">
+        <h3>Event log</h3>
+        <div class="two">
+          <label>Type <select id="evType"></select></label>
+          <label>Severity <select id="evSev"><option value="all">All</option><option value="crit">Critical</option><option value="warn">Warning</option><option value="info">Info</option></select></label>
+        </div>
+        <ul id="evList" class="evlist"></ul>
+        <div class="btns"><button type="button" id="evRead">Mark all read</button><button type="button" id="evCsv">Export CSV</button><button type="button" id="evClear">Clear log</button></div>
+      </div>
+      <div class="panel">
+        <h3>Alerts and notifications</h3>
+        <label class="check"><input id="nEnabled" type="checkbox"> Show alerts</label>
+        <label class="check"><input id="nSound" type="checkbox"> Play a sound</label>
+        <label class="check"><input id="nVib" type="checkbox"> Vibrate (phones)</label>
+        <label>Alert from severity <select id="nSev"><option value="info">Info and above</option><option value="warn">Warning and above</option><option value="crit">Critical only</option></select></label>
+        <div class="btns"><button type="button" id="nPerm">Allow system notifications</button><button type="button" id="nTest">Send a test alert</button></div>
+        <p class="note" id="nNote"></p>
+        <p class="note">System notifications appear while the app is open or in the background. A notification when the app is fully closed needs a push server, which this project does not include.</p>
+      </div>
+    </section>
+
+    <!-- ================= CARE ================= -->
+    <section id="tab-care" class="tab">
+      <div class="panel">
+        <h3>Weather and stow</h3>
+        <div class="grid3">
+          <div class="card"><h2>Wind</h2><p><span id="wxWind">--</span> <small>m/s</small></p></div>
+          <div class="card"><h2>Stow limit</h2><p><span id="wxLimit">--</span> <small>m/s</small></p></div>
+          <div class="card"><h2>Rain</h2><p><span id="wxRain">--</span></p></div>
+        </div>
+        <p>Status: <b id="wxStow">--</b></p>
+        <div class="btns"><button type="button" id="stowBtn">Stow now</button><button type="button" id="resumeBtn">Resume tracking</button></div>
+        <h3 class="sub">Forecast (next 24 hours)</h3>
+        <p id="fcStatus" class="note">Open this tab with internet to load the forecast.</p>
+        <canvas id="fcChart" width="640" height="180"></canvas>
+        <pre id="fcTip" class="tip"></pre>
+        <div id="fcTable" class="scroll"></div>
+        <div class="btns"><button type="button" id="fcRefresh">Refresh forecast</button></div>
+      </div>
+
+      <div class="panel">
+        <h3>Cleaning</h3>
+        <div class="grid3">
+          <div class="card"><h2>State</h2><p><span id="clState">--</span></p></div>
+          <div class="card"><h2>Water</h2><p><span id="clWater">--</span></p></div>
+          <div class="card"><h2>Soiling ratio</h2><p><span id="soilSR">--</span></p></div>
+        </div>
+        <p id="clRec" class="note"></p>
+        <div class="btns"><button type="button" id="clStart" class="primary">Start cleaning cycle</button><button type="button" id="clStop">Stop cleaning</button><button type="button" id="clManual">I cleaned it by hand</button></div>
+        <p id="soilNote" class="note"></p>
+        <table class="marks"><tr><td>Last cleaning</td><td id="soilLast">--</td></tr><tr><td>Next scheduled</td><td id="soilSched">--</td></tr><tr><td>Predicted by soiling</td><td id="soilPred">--</td></tr></table>
+        <canvas id="soilChart" width="640" height="150"></canvas>
+        <pre id="soilTip" class="tip"></pre>
+        <h3 class="sub">Cleaning log</h3>
+        <ul id="clLog" class="evlist"></ul>
+      </div>
+    </section>
+
+    <!-- ================= SETTINGS ================= -->
+    <section id="tab-set" class="tab">
+      <details class="panel" open>
+        <summary>Connection</summary>
+        <label>Cloud broker URL <input data-c="cloudUrl" type="text" placeholder="wss://xxxx.emqxsl.com:8084/mqtt"></label>
+        <label>Cloud username <input data-c="cloudUser" type="text" autocomplete="off"></label>
+        <label>Cloud password <input data-c="cloudPass" type="password" autocomplete="off"></label>
+        <label>Local device URL <input data-c="localUrl" type="text" placeholder="ws://192.168.1.60:8081"></label>
+        <label class="check"><input data-c="localEnabled" type="checkbox"> Use local connection when available</label>
+        <div class="btns"><button type="button" id="connSave" class="primary">Save and reconnect</button></div>
+        <p class="note" id="mixedNote"></p>
+        <div class="btns"><button type="button" id="installBtn" class="hidden">Install app</button></div>
+        <p class="note hidden" id="iosNote">On iPhone: tap Share, then Add to Home Screen.</p>
+      </details>
+
+      <details class="panel">
+        <summary>Security</summary>
+        <p class="note" id="secState"></p>
+        <div id="pinOldRow"><label>Current PIN <input id="pinOld" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label></div>
+        <div class="two">
+          <label>New PIN (4 to 8 digits) <input id="pinNew" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>
+          <label>Repeat new PIN <input id="pinNew2" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>
+        </div>
+        <div class="btns"><button type="button" id="pinSet" class="primary">Set or change PIN</button><button type="button" id="pinRemove">Remove PIN</button></div>
+        <label>Lock after being idle for <select id="idleSel"><option value="0">Never</option><option value="1">1 minute</option><option value="5" selected>5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select></label>
+        <label class="check"><input id="roToggle" type="checkbox"> Read-only mode (never send commands from this device)</label>
+        <h3 class="sub">Security checklist</h3>
+        <ul id="secList" class="evlist"></ul>
+        <label class="check"><input id="chk_sep" type="checkbox"> The phone uses its own broker login (not the device login)</label>
+        <label class="check"><input id="chk_acl" type="checkbox"> Broker topic rules restrict the phone login</label>
+        <label class="check"><input id="chk_pw" type="checkbox"> Test and shared passwords have been changed</label>
+        <p class="note">The PIN protects this app and the saved cloud password on a shared phone. The real protection of the tracker is the broker login and encrypted (wss) connection.</p>
+      </details>
+
+      <details class="panel">
+        <summary>Location and time</summary>
+        <div class="two">
+          <label>Latitude <input data-s="location.lat" type="number" step="0.0001"></label>
+          <label>Longitude <input data-s="location.lon" type="number" step="0.0001"></label>
+        </div>
+        <label>Time zone <select data-s="location.tz" id="tzSel"></select></label>
+        <div class="btns"><button type="button" id="gpsBtn">Use this phone's location</button></div>
+      </details>
+
+      <details class="panel">
+        <summary>Travel limits (degrees)</summary>
+        <div class="two">
+          <label>Azimuth min <input data-s="limits.az_min" type="number"></label>
+          <label>Azimuth max <input data-s="limits.az_max" type="number"></label>
+          <label>Elevation min <input data-s="limits.el_min" type="number"></label>
+          <label>Elevation max <input data-s="limits.el_max" type="number"></label>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>Thresholds</summary>
+        <div class="two">
+          <label>Confirm azimuth move over (&deg;) <input data-s="thresholds.confirm_az" type="number"></label>
+          <label>Confirm elevation move over (&deg;) <input data-s="thresholds.confirm_el" type="number"></label>
+          <label>Wind stow at (m/s) <input data-s="thresholds.wind_stow_ms" type="number" step="0.5"></label>
+          <label>Low water at (%) <input data-s="thresholds.low_water_pct" type="number"></label>
+          <label>Angle mismatch alarm (&deg;) <input data-s="thresholds.mismatch_deg" type="number" step="0.5"></label>
+          <label>Over-current cutoff (A) <input data-s="thresholds.overcurrent_a" type="number" step="0.1"></label>
+          <label>GPS movement alarm (m) <input data-s="thresholds.gps_move_m" type="number"></label>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>Cleaning and soiling</summary>
+        <div class="two">
+          <label>Clean at least every (days) <input data-s="thresholds.clean_interval_days" type="number"></label>
+          <label>Clean when soiling ratio below (%) <input data-s="thresholds.soil_threshold_pct" type="number"></label>
+          <label>Panel rated power (W) <input data-s="thresholds.panel_rated_w" type="number"></label>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>Advanced: PID gains</summary>
+        <label class="check"><input id="advToggle" type="checkbox"> Show advanced (PID gains)</label>
+        <div id="advBox" class="hidden">
+          <p class="note warn">Wrong gains can make the tracker oscillate or hit its end stops. Change one value at a time, in small steps, with the area clear.</p>
+          <div class="two">
+            <label>Az Kp <input data-s="pid.az.kp" type="number" step="0.01"></label>
+            <label>El Kp <input data-s="pid.el.kp" type="number" step="0.01"></label>
+            <label>Az Ki <input data-s="pid.az.ki" type="number" step="0.01"></label>
+            <label>El Ki <input data-s="pid.el.ki" type="number" step="0.01"></label>
+            <label>Az Kd <input data-s="pid.az.kd" type="number" step="0.01"></label>
+            <label>El Kd <input data-s="pid.el.kd" type="number" step="0.01"></label>
+          </div>
+        </div>
+      </details>
+
+      <div class="panel">
+        <h3>Sync with device</h3>
+        <p>Local settings revision <b id="revLocal">0</b> &middot; Device has <b id="revDev">--</b> &middot; <span id="syncChip" class="chip">Not sent</span></p>
+        <div class="btns">
+          <button type="button" id="setSave">Save on this phone</button>
+          <button type="button" id="setPublish" class="primary">Publish to device</button>
+          <button type="button" id="setReset">Reset to defaults</button>
+        </div>
+        <p id="setErrors" class="note warn"></p>
+      </div>
+
+      <details class="panel">
+        <summary>Calibration</summary>
+        <p class="note">Sets the end stops, the level reference and the azimuth reference. Needs the device online, in remote control.</p>
+        <p class="note" id="calibInfo">Not calibrated from this app yet.</p>
+        <div class="btns"><button type="button" id="calibOpen" class="primary">Start calibration wizard</button></div>
+      </details>
+
+      <details class="panel">
+        <summary>Diagnostics and link test</summary>
+        <label>Situation (written into the result) <input id="dgLabel" type="text" maxlength="40" placeholder="e.g. Home Wi-Fi, or 4G from another city"></label>
+        <div class="btns"><button type="button" id="dgLocal">Test local link</button><button type="button" id="dgCloud">Test cloud link</button></div>
+        <p class="note" id="dgStatus">Sends 20 test messages and measures the round trip and message loss.</p>
+        <ul id="dgRuns" class="evlist"></ul>
+        <p class="note">E-stop round trip: <b id="dgEstop"></b></p>
+        <div class="btns"><button type="button" id="dgCsv">Export results CSV</button><button type="button" id="dgReport">Download diagnostics report</button><button type="button" id="dgClear">Delete results</button></div>
+        <h3 class="sub">Link log</h3>
+        <pre id="dgLog" class="log"></pre>
+      </details>
+
+      <details class="panel">
+        <summary>About and data</summary>
+        <p>SolMate app <b id="ver2"></b>. Final year project: dual-axis solar tracker.</p>
+        <p class="note">Map tiles by OpenStreetMap contributors. Forecast data by Open-Meteo.</p>
+        <div class="btns"><button type="button" id="eraseAll">Erase all app data on this device</button></div>
+      </details>
+      <p class="note center">SolMate app <span id="ver"></span></p>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button type="button" data-tab="dash" class="on">Live</button>
+    <button type="button" data-tab="ctrl">Control</button>
+    <button type="button" data-tab="hist">Charts</button>
+    <button type="button" data-tab="events">Events<span id="evBadge" class="dot hidden">0</span></button>
+    <button type="button" data-tab="care">Care</button>
+    <button type="button" data-tab="set">Settings</button>
+  </nav>
+
+  <!-- PIN lock -->
+  <div id="lock" class="lock hidden">
+    <div class="lockbox">
+      <h2>SolMate is locked</h2>
+      <input id="lockPin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="PIN">
+      <div class="btns"><button type="button" id="lockGo" class="primary">Unlock</button><button type="button" id="lockView">View only</button></div>
+      <p id="lockMsg" class="note"></p>
+      <p class="note">View only shows the last known data and the local link. It cannot control the tracker. The E-STOP button always works.</p>
+    </div>
+  </div>
+
+  <!-- confirmation dialog -->
+  <dialog id="dlgConfirm">
+    <h3 id="cTitle">Confirm</h3>
+    <p id="cText"></p>
+    <div class="btns"><button type="button" id="cNo">Cancel</button><button type="button" id="cYes" class="primary">Confirm</button></div>
+  </dialog>
+
+  <!-- calibration wizard -->
+  <dialog id="dlgCalib">
+    <h3 id="wTitle">Calibration</h3>
+    <div class="steps" id="wDots"></div>
+    <div id="wBody"></div>
+    <div class="wlive">Now: Az <b id="wAz">--</b>&deg; &middot; El <b id="wEl">--</b>&deg; &middot; IMU <b id="wImu">--</b>&deg;</div>
+    <div class="jog small" id="wJog">
+      <button type="button" class="jogbtn" data-axis="el" data-dir="1">El &uarr;</button>
+      <button type="button" class="jogbtn" data-axis="az" data-dir="-1">&larr; Az</button>
+      <button type="button" class="stop" id="wStop">STOP</button>
+      <button type="button" class="jogbtn" data-axis="az" data-dir="1">Az &rarr;</button>
+      <button type="button" class="jogbtn" data-axis="el" data-dir="-1">El &darr;</button>
+    </div>
+    <div class="btns">
+      <button type="button" id="wCancel">Cancel</button>
+      <button type="button" id="wBack">Back</button>
+      <button type="button" id="wAction" class="primary">Next</button>
+    </div>
+  </dialog>
+
+  <div id="toasts" aria-live="polite"></div>
+
+  <script src="vendor/mqtt.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
